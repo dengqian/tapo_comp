@@ -36,6 +36,7 @@ int right_bound(uint32_t *array, int n, uint32_t val)
 
 int array_range(uint32_t *array, int n, uint32_t left, uint32_t right)
 {
+//	fprintf(stdout, "right:%d, left:%d\n", left_bound(array, n, right), left_bound(array, n, left));
 	return left_bound(array, n, right) - left_bound(array, n, left); //return seq_num of right - seq_num of left
 }
 

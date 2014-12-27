@@ -66,13 +66,13 @@ int get_tcp_option(struct tcphdr *th, struct tcp_option *ptcp_opt)
 	   			}
 	   			break;
 
-	   		case TCPOPT_TIMESTAMP:
+	   		case TCPOPT_time_stamp:
 	   			if (opt_len % 4 != 0) {
-	   				LOG(ERROR, "timestamp option is invalid, length = %d.\n", opt_len);
+	   				LOG(ERROR, "time_stamp option is invalid, length = %d.\n", opt_len);
 	   				return -1;
 	   			}
-	   			ptcp_opt->ts.tv_sec = ntohl(*(uint32_t *)(options+itr+2));
-	   			ptcp_opt->ts.tv_usec = ntohl(*(uint32_t *)(options+itr+2+4));	
+	   			ptcp_opt->ts.ts_val = ntohl(*(uint32_t *)(options+itr+2));
+	   			ptcp_opt->ts.ts_ecr = ntohl(*(uint32_t *)(options+itr+2+4));	
 	   			break;
 
 	   		default:

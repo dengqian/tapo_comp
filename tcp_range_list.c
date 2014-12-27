@@ -65,42 +65,17 @@ void delete_range_list(struct list_head *list)
 	delete_list(list, struct range_t, list);
 }
 
-//get the number of bytes reordered, record reorder begin and end
-int get_reorder(uint32_t seq, struct list_head *list, uint32_t *b, uint32_t *e)
+//get item number in the list
+int get_list_item_num(struct list_head *list)
 {
-	struct list_head *reord_node = list->next;
-	*b = seq;
-	*e = seq;
-	while (reord_node != list) {
-		struct range_t *reord = list_entry(reord_node, struct range_t, list);
-		if(before(reord->begin, *b))
-			*b = reord->begin;
-		if(after(reord->end, *e))
-			*e = reord->end;
-		reord_node = reord_node->next;
+	int cnt = 0;
+	struct list_head *pos;
+	list_for_each(pos, list) {
+		cnt++;
 	}
-	return *e - *b;
+	return cnt;
 }
-
-//get the number of bytes retransed, record retrans begin and end
-int get_retrans(uint32_t seq, struct list_head *list, uint32_t *b, uint32_t *e)
-{
-	
-	struct list_head *retrans_node = list->next;
-	*b = seq;
-	*e = seq;
-	while (retrans_node != list) {
-		struct range_t *retrans = list_entry(retrans_node, struct range_t, list);
-		if(before(retrans->begin, *b))
-			*b = retrans->begin;
-		if(after(retrans->end, *e))
-			*e = retrans->end;
-		retrans_node = retrans_node->next;
-	}
-	return *e - *b;
-}
-
-//insert into list ordered by seq
+/*
 void insert_to_range_list(struct list_head *list, uint32_t begin, uint32_t end)
 {
 	struct range_t *range = MALLOC(struct range_t);
@@ -117,11 +92,11 @@ void insert_to_range_list(struct list_head *list, uint32_t begin, uint32_t end)
 		temp_node = temp_node->next;
 	list_insert(&range->list, temp_node->prev, temp_node);
 }
-
+*/
 struct list_head *find_node_by_seq(struct list_head *list, uint32_t seq)
 {
 	struct list_head * pos;
-	list_for_each(pos, list){
+	list_for_each_prev (pos, list) {
 		struct range_t *node = list_entry(pos, struct range_t, list);
 		if(node->begin == seq)
 			return pos;
@@ -129,18 +104,19 @@ struct list_head *find_node_by_seq(struct list_head *list, uint32_t seq)
 	return NULL;
 }
 //delete ordered node when incomming the expected pkt
+/*
 void delete_ordered_node(struct list_head *list,uint32_t seq)
 {
 	struct list_head *node;
 	int seq_num = seq;
-	while((node = find_node_by_seq(list, seq_num)) != NULL){
+	while((node = find_node_by_seq(list, seq_num)) != NULL) {
 		struct range_t *range = list_entry(node, struct range_t, list);
 		seq_num = range->end;
 		FREE(range);
 		list_delete_entry(node);
 	}
 }
-
+*/
 //delete node with end smaller than seq
 void delete_node_before_seq(struct list_head *list, uint32_t seq)
 {

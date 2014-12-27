@@ -31,6 +31,10 @@ struct rtt_t {
 	uint32_t rto;
 };
 
+struct time_stamp {
+	uint32_t ts_val;
+	uint32_t ts_ecr;
+};
 // 1 tick = 0.001 second
 #define TIME_TO_TICK(t) ((int)((t)*1000))
 #define TICK_TO_TIME(tick) ((double)(tick)/1000.0)

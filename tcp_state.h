@@ -16,7 +16,6 @@
 
 #define TCP_CA_OPEN 0
 #define TCP_CA_RECOVERY 1
-#define ack_snt rcv_nxt
 
 extern const char *tcp_ca_state[];
 
@@ -27,22 +26,23 @@ struct tcp_state {
 	int pkt_cnt;
 	int state;
 
-	struct tcp_option options;
-	// rtt record & time related
-	double syn_ack_time;
-	double ack_syn_time;
-	double syn_rtt;
+	struct tcp_option option;
+	// time related
 	double last_in_time;
+	double last_out_time;
 	double start_time;
+	double last_time;
 
 	uint32_t seq_base;
+	uint32_t max_snd_seg_size;
+
 	uint32_t snd_nxt;
 	uint32_t snd_una;
 	uint32_t rcv_nxt;
 	uint32_t rcv_una;
-	uint32_t req_rcv;
-	uint32_t last_seq;
-	//disordered list
+	uint32_t last_in_seq;
+
+	// list
 	struct list_head disorder_list;
 	struct list_head retrans_list;
 	struct list_head reordering_list;
@@ -50,7 +50,17 @@ struct tcp_state {
 
 	// time list 
 	struct list_head in_time_list;
+	struct list_head out_time_list;
 	struct list_head estimate_time_list;
+
+	// stall related
+	struct list_head stall_list;
+	int stall_cnt;
+
+	//int sacked_num;
+	struct rtt_t rtt;
+	// time_stamp map 
+	struct rtt_hash_table_entry **tsp_table;
 };
 
 struct tcp_state *new_tcp_state(struct tcp_key *key, double time);

@@ -19,7 +19,7 @@
 #define TCPOPT_WSCALE 3 /* Window scaling */
 #define TCPOPT_SACK_PERM 4 /* SACK Permitted */
 #define TCPOPT_SACK 5 /* SACK Block */
-#define TCPOPT_TIMESTAMP 8 /* Better RTT estimations/PAWS */
+#define TCPOPT_time_stamp 8 /* Better RTT estimations/PAWS */
 #define TCPOPT_LIMIT 9
 
 struct tcp_option {
@@ -28,7 +28,8 @@ struct tcp_option {
 	uint8_t wscale;
 	uint8_t sack_ok;
 	struct sack_block sack;
-	struct timeval ts;
+	//time_stamp option
+	struct time_stamp ts;
 };
 
 int get_tcp_option(struct tcphdr *th, struct tcp_option *ptcpopt);

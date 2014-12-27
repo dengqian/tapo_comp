@@ -81,7 +81,6 @@ static void parse_tcp_info(struct tcp_key *key, double time, struct tcphdr *th, 
 	if (ts != NULL) {
 		//update ts with info inside of th
 		tcp_state_machine(ts, th, len, time, dir);
-
 		if (ts->state == TCP_CLOSE || ts->state == TCP_CLOSING) {
 			delete_ts_entry(hash_table, ts);
 			// free_tcp_state(ts);
@@ -143,11 +142,21 @@ void handle_pcap()
 
 int main(int argc, const char **argv)
 {
+	struct timeval start_tv, end_tv;
+	unsigned long start_time, end_time;
+	gettimeofday(&start_tv, NULL);
+	start_time = start_tv.tv_sec * 1000000 + start_tv.tv_usec; 
+
 	parse_cmd_options(argc, argv);//define in cmd_options.c
 
 	init();
 	handle_pcap();
 	cleanup();
+	
+	gettimeofday(&end_tv, NULL);
+	end_time = end_tv.tv_sec * 1000000 + end_tv.tv_usec;
+
+	fprintf(stdout, "time_used:%lf\n", 1.0*(end_time - start_time)/1000000);
 
 	return 0;
 }

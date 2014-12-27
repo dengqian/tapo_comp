@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <errno.h>
 
+#define HASH_FACTOR 1024
 // in buf, skip s bits, then read n bits
 // ensure len(buf)*8 >= (n+s) and n <= 32
 static inline int read_nbits(unsigned char *buf, int n, int s)
@@ -129,10 +130,94 @@ void cleanup_hash_table(struct hash_table_entry **hash_table)
 		while (hash_table[i] != NULL) {
 			struct hash_table_entry *temp = hash_table[i];
 			hash_table[i] = hash_table[i]->next;
-			finish_tcp_state(temp->ts);
+			// finish_tcp_state(temp->ts);
 			FREE(temp);
 		}
 	} 
 
 	FREE(hash_table);
 }
+
+int rtt_hash(uint32_t *ts_val) 
+{
+	return *ts_val % HASH_FACTOR;	
+}
+struct rtt_hash_table_entry **new_rtt_hash_table()
+{
+	struct rtt_hash_table_entry **ht = MALLOC_N(struct rtt_hash_table_entry *, RTT_HASH_TABLE_SIZE);
+	if (ht == NULL) {
+		LOG(ERROR, "malloc hash table failed: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	return ht;
+}
+
+struct time_stamp *find_rtt_entry(struct rtt_hash_table_entry **hash_table, struct time_stamp ts)
+{
+	struct rtt_hash_table_entry *entry = hash_table[rtt_hash(&ts.ts_ecr)];
+	while (entry) {
+		if (memcmp(&entry->ts->ts_ecr, &ts.ts_ecr, sizeof(uint32_t)) == 0)	// int memcmp(const void *s1, const void *s2, size_t n);
+		//The memcmp() function compares the first n bytes (each interpreted as unsigned char) of the memory areas s1 and s2.return value can be < = > 0
+			return entry->ts;
+		entry = entry->next;
+	}
+
+	return NULL;
+}
+int insert_rtt_entry(struct rtt_hash_table_entry **hash_table, struct time_stamp *ts)
+{
+	int hv = rtt_hash(&(ts->ts_val));
+	struct rtt_hash_table_entry *entry = MALLOC(struct rtt_hash_table_entry);
+	entry->ts = ts;
+	entry->next = hash_table[hv];
+	hash_table[hv] = entry;
+
+	return 0;
+}
+// delete the node with key value ts->key, then finish_tcp_state
+int delete_rtt_entry(struct rtt_hash_table_entry **hash_table, struct time_stamp ts)
+{
+	int hv = rtt_hash(&ts.ts_val);
+
+	struct rtt_hash_table_entry *entry = hash_table[hv],
+							*temp = NULL;
+	if (memcmp(&entry->ts->ts_val, &ts.ts_val, sizeof(uint32_t)) == 0) {
+		temp = entry;
+		hash_table[hv] = temp->next;
+		//finish_tcp_state(temp->ts);
+		FREE(temp);
+		return 1;
+	}
+	else {
+		while (entry->next) {
+			temp = entry->next;
+			if (memcmp(&entry->ts->ts_val, &ts.ts_val, sizeof(uint32_t)) == 0) {
+				entry->next = temp->next;
+				//finish_tcp_state(temp->ts);
+				FREE(temp);
+				return 1;
+			}
+
+			entry = entry->next;
+		}
+
+		return 0;
+	}
+}
+
+void cleanup_rtt_hash_table(struct rtt_hash_table_entry **hash_table)
+{
+	int i = 0;
+	for (; i < RTT_HASH_TABLE_SIZE; i++) {
+		while (hash_table[i] != NULL) {
+			struct rtt_hash_table_entry *temp = hash_table[i];
+			hash_table[i] = hash_table[i]->next;
+			//finish_tcp_state(temp->ts);
+			FREE(temp);
+		}
+	} 
+
+	FREE(hash_table);
+}
+

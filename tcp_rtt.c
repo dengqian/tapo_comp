@@ -56,13 +56,14 @@ void delete_rtt_list(struct list_head *list)
 double get_time_by_seq(uint32_t seq, struct list_head *list)
 {
 	struct list_head *pos;
-	struct seq_rtt_t *node = MALLOC(struct seq_rtt_t);
-	list_for_each(pos, list){
+	struct seq_rtt_t *node;
+
+	list_for_each_prev(pos, list){
 		node = list_entry(pos, struct seq_rtt_t, list);
 		if (seq == node->ack_seq)
 			return node->time;
-		else if(seq > node->ack_seq)
-			break;
+		//else if(seq > node->ack_seq)
+		//	break;
 	}
 	return 0;
 }
