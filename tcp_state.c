@@ -14,6 +14,7 @@
 #include <string.h>
 
 #define DELTA 2
+#define TRIPLE 3
 
 const char *tcp_ca_state[] = { "TCP_CA_OPEN", "TCP_CA_RECOVERY" };
 
@@ -90,7 +91,7 @@ double get_ack_delay_time(struct tcp_state *ts, uint32_t seq)
 	return 0;
 }
 //get_third_seq in disorder_list
-int get_third_seq(struct list_head *list) 
+/*int get_third_seq(struct list_head *list) 
 {
 	struct list_head *pos;
 	struct range_t *range;
@@ -103,7 +104,7 @@ int get_third_seq(struct list_head *list)
 		}
 	}
 	return 0;
-}
+}*/
 
 //get the number of bytes reordered, record reorder begin and end
 int get_reorder(uint32_t seq, struct list_head *list, uint32_t *b, uint32_t *e)
@@ -150,10 +151,10 @@ static void handle_in_pkt(struct tcp_state *ts, struct tcphdr *th, double time, 
 	uint32_t seq = ntohl(th->seq),
 			 ack_seq = ntohl(th->ack_seq);
 	double estimate_time = time;
-	FILE *fp = stdout;
+	int disorder_num = 0;
 
 	ts->snd_una = ack_seq;
-	ts->rcv_una = seq + len;
+	ts->rcv_una = seq;
 
 	ts->max_snd_seg_size = MAX(ts->max_snd_seg_size, len);
 
@@ -161,44 +162,63 @@ static void handle_in_pkt(struct tcp_state *ts, struct tcphdr *th, double time, 
 	if (seq > ts->rcv_nxt && seq > 1) {
 		append_to_range_list(&ts->disorder_list, seq, seq+len);
 		// calculate the time we estimate pkt with seq rcv_nxt arrives
-		if (!in_range_list(seq, &ts->disorder_list) && get_time_by_seq(ts->rcv_nxt, &ts->estimate_time_list) == 0) {
+		if (get_time_by_seq(ts->rcv_nxt, &ts->estimate_time_list) == 0) {
 			estimate_time = ts->last_in_time + (time - ts->last_in_time) * ((ts->rcv_nxt - ts->last_in_seq)*1.0 / (seq - ts->last_in_seq));
 			insert_seq_rtt(ts->rcv_nxt, estimate_time, &ts->estimate_time_list);
-			// fprintf(fp, "gt\n");
+			uint32_t tmp_seq = ts->rcv_nxt;
+			// LOG(DEBUG, "%d, %d, %d\n", ts->rcv_nxt, seq,  ts->max_snd_seg_size);
+			while (ts->max_snd_seg_size > 0 && tmp_seq + ts->max_snd_seg_size < seq) {
+				estimate_time = ts->last_in_time + (time - ts->last_in_time) * ((tmp_seq - ts->last_in_seq)*1.0 / (seq - ts->last_in_seq));
+				insert_seq_rtt(tmp_seq, estimate_time, &ts->estimate_time_list);
+				tmp_seq += ts->max_snd_seg_size;
+				// LOG(DEBUG, "%d, %d, in cycling...", ts->rcv_nxt, ts->max_snd_seg_size);
+			}
 		}
-	} else if (seq == ts->rcv_nxt && get_list_item_num(&ts->disorder_list) > 0) {
+		else if (ts->max_snd_seg_size > 0 && seq > ts->last_in_seq + ts->max_snd_seg_size) {
+			uint32_t tmp_seq = ts->last_in_seq + ts->max_snd_seg_size;
+			while (tmp_seq + ts->max_snd_seg_size < seq) {
+				estimate_time = ts->last_in_time + (time - ts->last_in_time) * ((tmp_seq - ts->last_in_seq)*1.0 / (seq - ts->last_in_seq));
+				insert_seq_rtt(tmp_seq, estimate_time, &ts->estimate_time_list);
+				tmp_seq += ts->max_snd_seg_size;
+			}
+		}
+	} else if (seq == ts->rcv_nxt && (disorder_num=get_list_item_num(&ts->disorder_list)) > 0) {
 		uint32_t b, e; 
 		int l;
-		uint32_t third_seq = 0;
 		double third_dup_time = time;
-		// time gap > rtt => retrans
-		if ((third_seq = get_third_seq(&ts->disorder_list)) != 0) {
-			third_dup_time = get_time_by_seq(third_seq, &ts->in_time_list);
-		}
-		estimate_time = get_time_by_seq(seq, &ts->estimate_time_list);
-		if (estimate_time == 0)
-			estimate_time = time;
-	
-		if (time-third_dup_time > TICK_TO_TIME(ts->rtt.srtt >> 3) || time-estimate_time > TICK_TO_TIME(ts->rtt.rto)) {
-			l = get_retrans(ts, seq, &ts->disorder_list, &b, &e);
+		if (disorder_num >= 2) {
+		/*	l = get_retrans(ts, seq, &ts->disorder_list, &b, &e);
 			if(l > 0)
-				append_to_range_list(&ts->retrans_list, b, e);
+				append_to_range_list(&ts->retrans_list, b, e);*/
+			append_to_range_list(&ts->retrans_list, seq, seq+len);
 		} else {
-			l = get_reorder(seq, &ts->disorder_list, &b, &e);
-			if(l>0)
-				append_to_range_list(&ts->reordering_list, b, e);
+			if (ts->rcv_nxt == ts->third_dup_ack_time.ack_seq)
+ 				third_dup_time = ts->third_dup_ack_time.time;
+			estimate_time = get_time_by_seq(seq, &ts->estimate_time_list);
+			if (estimate_time == 0)
+				estimate_time = time;
+	
+			if (time-third_dup_time > TICK_TO_TIME(ts->rtt.srtt >> 3) || time-estimate_time > MAX(TICK_TO_TIME(ts->rtt.srtt >> 3 * TRIPLE), 0.2)) {
+			 	append_to_range_list(&ts->retrans_list, seq, seq+len);
+				/*l = get_retrans(ts, seq, &ts->disorder_list, &b, &e);
+				if(l > 0)
+					append_to_range_list(&ts->retrans_list, b, e);*/
+			} else {
+				l = get_reorder(seq, &ts->disorder_list, &b, &e);
+				if(l>0)
+					append_to_range_list(&ts->reordering_list, b, e);
+			}
 		}
+	
 		struct list_head *pos = find_node_by_seq(&ts->disorder_list, seq+len);
 		if (pos == NULL) {
 			estimate_time = ts->last_in_time + (time - ts->last_in_time) * ((ts->last_in_seq - seq - len)*1.0 / (ts->last_in_seq - seq));
 			insert_seq_rtt(seq+len, estimate_time, &ts->estimate_time_list);
-			// fprintf(fp, "eq\n");
 		} 
-		//delete_ordered_node(&ts->disorder_list, seq+len);
+
 	} else if(seq < ts->rcv_nxt || (seq == ts->last_in_seq && ts->pkt_cnt > 4)){
 		append_to_range_list(&ts->spurious_retrans_list, seq, seq+len);
 		update_retrans_and_reorder(ts, seq);
-		//fprintf(fp, "dup_seq and rcv_nxt and last_in_seq: %d\t%d\t%d\n", seq-ts->seq_base, ts->rcv_nxt-ts->seq_base, ts->last_in_seq-ts->seq_base);
 	} 
 
 	/*struct time_stamp *tsp = find_rtt_entry(ts->tsp_table, ts->option.ts);
@@ -210,14 +230,32 @@ static void handle_in_pkt(struct tcp_state *ts, struct tcphdr *th, double time, 
 
 static void handle_out_pkt(struct tcp_state *ts, struct tcphdr *th, double time, int len)
 {
-	// FILE *fp = stdout;
 	uint32_t seq = ntohl(th->seq),
 			 ack_seq = ntohl(th->ack_seq);
 
 	ts->rcv_nxt = ack_seq;
 	ts->snd_nxt = seq + len;
-
-	delete_node_before_seq(&ts->disorder_list, ack_seq);
+	
+	// tail record
+	if (ts->state == TCP_ESTABLISHED) {
+		if (len > 0)
+			ts->tail = 1;
+		else 
+			ts->tail = 0;
+	}
+	if (ts->state == TCP_ESTABLISHED && ack_seq == ts->last_out_ack) {
+		ts->dup_ack_cnt += 1;
+	} else {
+		ts->dup_ack_cnt = 0;	
+	}
+	if (ts->dup_ack_cnt == 3) {
+		ts->third_dup_ack_time.ack_seq = ack_seq;
+		ts->third_dup_ack_time.time = time;
+	}
+	if(ack_seq > ts->last_out_ack) {
+		//  delete_before_seq(ack_seq, &ts->estimate_time_list);
+		 delete_node_before_seq(&ts->disorder_list, ack_seq);
+	}
 	//time_stamp record
 	struct time_stamp *tsp = find_rtt_entry(ts->tsp_table, ts->option.ts);
 	if (tsp == NULL) {
@@ -231,7 +269,6 @@ int tcp_state_machine(struct tcp_state *ts, struct tcphdr *th, int len, double c
 	uint32_t seq = ntohl(th->seq);
 	uint32_t ack_seq = ntohl(th->ack_seq);
 	ts->pkt_cnt += 1;
-	FILE * fp = stdout;
 	if (dir == DIR_IN && ts->state == TCP_SYN_SENT) {
 		// calculate first rtt during syn
 		int rtt = TIME_TO_TICK(cap_time - ts->last_out_time);
@@ -271,8 +308,10 @@ int tcp_state_machine(struct tcp_state *ts, struct tcphdr *th, int len, double c
 					ts->state = TCP_CLOSING;
 				}
 				else if (IS_FIN(th)) {
-					if (dir == DIR_IN) 
+					ts->tail = 1;
+					if (dir == DIR_IN){
 						ts->state = TCP_FIN_WAIT1;
+					} 
 					else
 						ts->state = TCP_FIN_WAIT2;
 				}
@@ -315,7 +354,7 @@ int tcp_state_machine(struct tcp_state *ts, struct tcphdr *th, int len, double c
 	else {
 		duration = TIME_TO_TICK(cap_time - ts->last_time);
 	}
-	if (duration > thres) {
+	if (ts->tail == 0 && duration > thres) { // tail case is not included
 		// store the (partial) stall state in list
 		ts->stall_cnt += 1;
 
@@ -323,26 +362,26 @@ int tcp_state_machine(struct tcp_state *ts, struct tcphdr *th, int len, double c
 		struct tcp_stall_state *tss = MALLOC(struct tcp_stall_state);
 		init_tcp_stall(ts, tss, TICK_TO_TIME(duration));
 		tss->cur_pkt_dir = dir;
-		tss->ack_delay_time = get_ack_delay_time(ts, tss->rcv_una);
-		list_insert(&tss->list, ts->stall_list.prev, &ts->stall_list);
-
-		//ts->stall_dir_waiting = 1;
-		// finally, update the following info
-		// ts->last_stall_point = ts->rcv_nxt;
-		// ts->last_stall_time = cap_time;
+		//tss->ack_delay_time = get_ack_delay_time(ts, tss->rcv_una);
+		//list_insert(&tss->list, ts->stall_list.prev, &ts->stall_list);
+		list_add_tail(&tss->list, &ts->stall_list);
 	}
 
 	if (dir == DIR_IN) {
 		ts->last_in_time = cap_time;
+		ts->last_len = len;
 		// record in_time to the list
 		insert_seq_rtt(seq, cap_time, &ts->in_time_list);
 		ts->last_in_seq = seq;
 	} else {
 		ts->last_out_time = cap_time;
+		ts->last_out_ack = ack_seq;
 		insert_seq_rtt(ack_seq, cap_time, &ts->out_time_list);
 	}
 
-	ts->last_time = cap_time;
+	if (ts->state == TCP_ESTABLISHED || ts->state == TCP_SYN_SENT || ts->state == TCP_SYN_RECV)
+		ts->last_time = cap_time;
+	ts->last_dir = dir;		
 
 	return 0;
 }
@@ -394,16 +433,17 @@ void dump_tss_list(FILE *fp, struct list_head *list)
 
 void dump_ts_info(FILE *fp, struct tcp_state *ts)
 {
-	dump_time_list(fp, "in_time_list:", ts, &ts->in_time_list);
-	dump_time_list(fp, "out_time_list:", ts, &ts->out_time_list);
-	dump_time_list(fp, "estimate_time:", ts, &ts->estimate_time_list);
+//	dump_time_list(fp, "in_time_list:", ts, &ts->in_time_list);
+//	dump_time_list(fp, "out_time_list:", ts, &ts->out_time_list);
+//	dump_time_list(fp, "estimate_time:", ts, &ts->estimate_time_list);
 	dump_list(fp, "retrans:", ts, &ts->retrans_list);
 	dump_list(fp, "reorder:", ts, &ts->reordering_list);
 	dump_list(fp, "spurious:", ts, &ts->spurious_retrans_list);
-	//dump_list(fp, "lost:", ts, &ts->lost_list);
 	fprintf(fp, "%s: \"%d\"\n", "pkt_cnt", ts->pkt_cnt);
-	fprintf(fp, "%s: \"%lf\"\n\n", "rtt", TICK_TO_TIME(ts->rtt.srtt >> 3));
-	//fprintf(fp, "%s: \"%d\"\n", "seq_base", ts->seq_base);
+	fprintf(fp, "%s: \"%lf\"\n", "rtt", TICK_TO_TIME(ts->rtt.srtt >> 3));
+	fprintf(fp, "%s: \"%lf\"\n", "rto", TICK_TO_TIME(ts->rtt.rto));
+	fprintf(fp, "%s: \"%d\"\n", "max_snd_seg_size", ts->max_snd_seg_size);
+	fprintf(fp, "%s: \"%.3lf\"\n\n", "transfer_time", ts->transfer_time);
 }
 
 static void free_tcp_state(struct tcp_state *ts)
@@ -411,10 +451,8 @@ static void free_tcp_state(struct tcp_state *ts)
 	//delete_rtt_list(&ts->rtt_list);
 
 	delete_list(&ts->retrans_list, struct range_t, list);
-	//delete_list(&ts->block_list, struct range_t, list);
 	delete_list(&ts->reordering_list, struct range_t, list);
 	delete_list(&ts->spurious_retrans_list, struct range_t, list);
-	//delete_list(&ts->lost_list, struct range_t, list);
 	delete_list(&ts->disorder_list, struct range_t, list);
 	delete_list(&ts->stall_list, struct tcp_stall_state, list);
 	delete_rtt_list(&ts->in_time_list);
@@ -427,11 +465,12 @@ static void free_tcp_state(struct tcp_state *ts)
 
 void finish_tcp_state(struct tcp_state *ts)
 {
+	FILE *fp = stdout;
 	if (ts->max_snd_seg_size != 0) {
 
 		fill_tcp_stall_list(ts, &ts->stall_list);
 
-		FILE *fp = stdout;
+		ts->transfer_time = ts->last_time - ts->start_time;
 
 		fprintf(fp, "\nname: %s\n", ts->name);
 		fprintf(fp, "#(stalls): %d\n", ts->stall_cnt);

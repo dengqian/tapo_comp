@@ -2,7 +2,7 @@
 
 
 const char *stall_text[] = {
-"UNDETERMINED", "DOUBLE_RETRANSMISSION", "SMALL_CWND", "CONTINUOUS_LOSS", "ACK_DELAY", "ACK_LOSS", "PACKET_DELAY", };
+"UNDETERMINED", "DOUBLE_RETRANSMISSION", "SMALL_CWND", "CONTINUOUS_LOSS", "ACK_DELAY", "ACK_LOSS", "PACKET_DELAY", "CLIENT_IDLE","CONNECTION_CLOSING"};
 const char *stall_details[] = {
 	"This stall could not be determined.",
 	"The retransmitted packet is dropped.",
@@ -11,27 +11,37 @@ const char *stall_details[] = {
 	"Delayed-ACKs at server.",
 	"ACK loss happens.",
 	"RTT jitter (current RTT is larger than (\\tau SRTT)).",
+	"Client uploading another file.",
+	"Connection closing.",
 };
 enum stall_type parse_stall(struct tcp_stall_state *tss)
 {
 	if (tss->retrans + tss->spurious > 0) {
-		if (tss->cur_pkt_spurious > 0) {
-			if (tss->ack_delay_time > tss->rto - tss->srtt) {
-				return ACK_DELAY;
+		if (tss->retrans > 0) {
+			if (tss->cur_pkt_spurious + tss->cur_pkt_retrans >= 2) {
+				return DOUBLE_RETRANSMISSION;
 			} else {
-				return ACK_LOSS;
-			}
-		} else {
-			if (tss->sacked > 3) {
-				if (tss->duration > tss->rto + tss->srtt) {
-					return DOUBLE_RETRANSMISSION;
+				if (tss->sacked > 3) {
+					if (tss->duration + tss->cur_time - tss->third_dup_ack_time > tss->rto + tss->srtt) 
+						return DOUBLE_RETRANSMISSION;
+					else
+						return UNDETERMINED;
 				} else {
-					return UNDETERMINED;
+					return SMALL_CWND;
 				}
+			} 
+		} else {
+			if (tss->cur_pkt_spurious > 0) {
+				/*if (tss->ack_delay_time > tss->rto - tss->srtt) {
+					return ACK_DELAY;
+				} else {
+					return ACK_LOSS;
+				}*/
+				return ACK_LOSS;
 			} else {
-				return SMALL_CWND;	
+				return UNDETERMINED;
 			}
-		}	
+		}
 	} else {
 		if (tss->cur_pkt_dir == DIR_IN) {
 			if (tss->duration > tss->rto + tss->srtt) {
@@ -40,7 +50,10 @@ enum stall_type parse_stall(struct tcp_stall_state *tss)
 				return PACKET_DELAY;
 			}
 		} else {
-			return ACK_DELAY;
-		}
+			if (tss->last_dir == DIR_IN)
+				return ACK_DELAY;
+			else 
+				return CLIENT_IDLE;
+		} 
 	}
 }

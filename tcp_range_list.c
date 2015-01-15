@@ -103,20 +103,7 @@ struct list_head *find_node_by_seq(struct list_head *list, uint32_t seq)
 	}
 	return NULL;
 }
-//delete ordered node when incomming the expected pkt
-/*
-void delete_ordered_node(struct list_head *list,uint32_t seq)
-{
-	struct list_head *node;
-	int seq_num = seq;
-	while((node = find_node_by_seq(list, seq_num)) != NULL) {
-		struct range_t *range = list_entry(node, struct range_t, list);
-		seq_num = range->end;
-		FREE(range);
-		list_delete_entry(node);
-	}
-}
-*/
+
 //delete node with end smaller than seq
 void delete_node_before_seq(struct list_head *list, uint32_t seq)
 {

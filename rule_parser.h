@@ -3,7 +3,7 @@
 
 #include "tcp_stall_state.h"
 
-enum stall_type { UNDETERMINED, DOUBLE_RETRANSMISSION, SMALL_CWND, CONTINUOUS_LOSS, ACK_DELAY, ACK_LOSS, PACKET_DELAY, };
+enum stall_type { UNDETERMINED, DOUBLE_RETRANSMISSION, SMALL_CWND, CONTINUOUS_LOSS, ACK_DELAY, ACK_LOSS, PACKET_DELAY, CLIENT_IDLE,CONNECTION_CLOSING,};
 extern const char *stall_text[];
 extern const char *stall_details[];
 extern enum stall_type parse_stall(struct tcp_stall_state *);

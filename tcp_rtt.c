@@ -67,3 +67,20 @@ double get_time_by_seq(uint32_t seq, struct list_head *list)
 	}
 	return 0;
 }
+
+//delete_node with seq smaller than seq
+void delete_before_seq(uint32_t seq, struct list_head *list) 
+{
+	struct list_head *pos;
+	struct seq_rtt_t *node;
+
+	list_for_each (pos, list) {
+		node = list_entry (pos, struct seq_rtt_t, list);
+		if (seq >= node->ack_seq) {
+			FREE(node);
+			list_delete_entry(pos);
+		}
+		if (seq < node->ack_seq)
+			break;
+	}
+}

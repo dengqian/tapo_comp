@@ -10,12 +10,17 @@ struct tcp_state;
 struct tcp_stall_state {
 	int max_snd_seg_size;
 	//int ca_state;
+	// length of the last in packet 
+	int cur_len;
+	int last_dir;
+	int tail;
 
 	double cur_time;
 	double duration;
 	double srtt;
 	double rto;
 	double ack_delay_time;
+	double third_dup_ack_time;
 	
 	uint32_t seq_base;
 	uint32_t snd_una;
@@ -26,9 +31,8 @@ struct tcp_stall_state {
 
 	int sacked;
 	int spurious;
-	int spurious_left;
-	int spurious_right;
 	int retrans;
+	int cur_pkt_retrans;
 	int cur_pkt_spurious;
 	int cur_pkt_dir;
 

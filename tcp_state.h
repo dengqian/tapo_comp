@@ -18,7 +18,10 @@
 #define TCP_CA_RECOVERY 1
 
 extern const char *tcp_ca_state[];
-
+struct seq_dup_time {
+	uint32_t ack_seq;
+	double time;
+};
 struct tcp_state {
 	struct tcp_key key;
 	char name[128];
@@ -32,15 +35,25 @@ struct tcp_state {
 	double last_out_time;
 	double start_time;
 	double last_time;
+	double transfer_time;
+
+	struct seq_dup_time third_dup_ack_time;
+	int dup_ack_cnt;
+
+	int retrans_flag;
+	int tail;
+	int last_len;
+	int last_dir;
 
 	uint32_t seq_base;
 	uint32_t max_snd_seg_size;
 
 	uint32_t snd_nxt;
 	uint32_t snd_una;
-	uint32_t rcv_nxt;
-	uint32_t rcv_una;
+	uint32_t rcv_nxt; // largest ack_snt
+	uint32_t rcv_una; // seq of the incomming pkt
 	uint32_t last_in_seq;
+	uint32_t last_out_ack;
 
 	// list
 	struct list_head disorder_list;
@@ -57,9 +70,7 @@ struct tcp_state {
 	struct list_head stall_list;
 	int stall_cnt;
 
-	//int sacked_num;
 	struct rtt_t rtt;
-	// time_stamp map 
 	struct rtt_hash_table_entry **tsp_table;
 };
 

@@ -76,7 +76,7 @@ int get_tcp_option(struct tcphdr *th, struct tcp_option *ptcp_opt)
 	   			break;
 
 	   		default:
-	   			LOG(DEBUG, "unknown option %d\n", opt_code);
+	   			//LOG(DEBUG, "unknown option %d\n", opt_code);
 	   			break;
 	   	}
 

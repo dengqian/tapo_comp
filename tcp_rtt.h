@@ -15,5 +15,6 @@ void insert_seq_rtt(uint32_t ack_seq, double t, struct list_head *list);
 int get_rtt(uint32_t ack, double t, struct list_head *list);
 void delete_rtt_list(struct list_head *list);
 double get_time_by_seq(uint32_t seq, struct list_head *list);
+void delete_before_seq(uint32_t seq, struct list_head *list);
 
 #endif
