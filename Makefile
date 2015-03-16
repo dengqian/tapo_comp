@@ -21,10 +21,10 @@ ifeq (,$(findstring $(RULE_PARSER), $(SRC)))
 endif
 OBJS=$(patsubst %.c, %.o, $(SRC))
 
-$(RULE_PARSER).h: $(RULE_PARSER).c
+# $(RULE_PARSER).h: $(RULE_PARSER).c
 
-$(RULE_PARSER).c: $(PARSER_DIR)/Makefile $(PARSER_DIR)/parser.y $(PARSER_DIR)/parser.lex $(PARSER_DIR)/rules.txt
-	cd $(PARSER_DIR); make 
+# $(RULE_PARSER).c: $(PARSER_DIR)/Makefile $(PARSER_DIR)/parser.y $(PARSER_DIR)/parser.lex $(PARSER_DIR)/rules.txt
+#	cd $(PARSER_DIR); make 
 
 %.o: %.c $(HEADER)
 	$(CC) $(CFLAGS) -c $< -o $@  

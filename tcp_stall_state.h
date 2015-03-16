@@ -9,11 +9,13 @@ struct tcp_state;
 
 struct tcp_stall_state {
 	int max_snd_seg_size;
-	//int ca_state;
 	// length of the last in packet 
 	int cur_len;
 	int last_dir;
 	int tail;
+	int head;
+
+	int ca_state;
 
 	double cur_time;
 	double duration;
@@ -23,8 +25,8 @@ struct tcp_stall_state {
 	double third_dup_ack_time;
 	
 	uint32_t seq_base;
-	uint32_t snd_una;
-	uint32_t snd_nxt;
+	// uint32_t snd_una;
+	// uint32_t snd_nxt;
 	//duration from ack_snt to seq_rcv exceed timeout
 	uint32_t rcv_nxt;
 	uint32_t rcv_una;

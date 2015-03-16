@@ -30,6 +30,7 @@ struct tcp_state *new_tcp_state(struct tcp_key *key, double time)
 	memcpy(&ts->key, key, sizeof(struct tcp_key));
 	sprintf(ts->name, "%s.%hu", inet_ntoa(key->addr[1]), ntohs(key->port[1]));
 	ts->state = TCP_LISTEN;
+	ts->ca_state = TCP_CA_OPEN;
 
 	init_rtt(&ts->rtt);	
 
@@ -42,7 +43,7 @@ struct tcp_state *new_tcp_state(struct tcp_key *key, double time)
 	init_list_head(&ts->estimate_time_list);
 	init_list_head(&ts->stall_list);
 
-	ts->tsp_table = new_rtt_hash_table();
+	// ts->tsp_table = new_rtt_hash_table();
 
 	return ts;
 }
@@ -155,10 +156,16 @@ static void handle_in_pkt(struct tcp_state *ts, struct tcphdr *th, double time, 
 
 	ts->snd_una = ack_seq;
 	ts->rcv_una = seq;
+	ts->rcv_max = MAX(ts->rcv_max, seq + len);
 
 	ts->max_snd_seg_size = MAX(ts->max_snd_seg_size, len);
-
-	//dup pkt 
+	disorder_num=get_list_item_num(&ts->disorder_list);
+	
+	if (ts->ca_state == TCP_CA_OPEN && ts->state == TCP_ESTABLISHED &&  seq+len < ts->rcv_max && disorder_num > 1) {
+		ts->ca_state = TCP_CA_RECOVERY;
+		ts->recovery_point = ts->rcv_max;
+	}
+	
 	if (seq > ts->rcv_nxt && seq > 1) {
 		append_to_range_list(&ts->disorder_list, seq, seq+len);
 		// calculate the time we estimate pkt with seq rcv_nxt arrives
@@ -182,16 +189,17 @@ static void handle_in_pkt(struct tcp_state *ts, struct tcphdr *th, double time, 
 				tmp_seq += ts->max_snd_seg_size;
 			}
 		}
-	} else if (seq == ts->rcv_nxt && (disorder_num=get_list_item_num(&ts->disorder_list)) > 0) {
+	} else if (seq == ts->rcv_nxt && (disorder_num) > 0) {
 		uint32_t b, e; 
 		int l;
 		double third_dup_time = time;
-		if (disorder_num >= 2) {
+		if (disorder_num >= 2 || ts->last_in_seq - seq > ts->max_snd_seg_size) {
 		/*	l = get_retrans(ts, seq, &ts->disorder_list, &b, &e);
 			if(l > 0)
 				append_to_range_list(&ts->retrans_list, b, e);*/
 			append_to_range_list(&ts->retrans_list, seq, seq+len);
 		} else {
+			// if (ts->ca_state == TCP_CA_RECOVERY && ts->)
 			if (ts->rcv_nxt == ts->third_dup_ack_time.ack_seq)
  				third_dup_time = ts->third_dup_ack_time.time;
 			estimate_time = get_time_by_seq(seq, &ts->estimate_time_list);
@@ -236,6 +244,10 @@ static void handle_out_pkt(struct tcp_state *ts, struct tcphdr *th, double time,
 	ts->rcv_nxt = ack_seq;
 	ts->snd_nxt = seq + len;
 	
+	if (ts->ca_state != TCP_CA_OPEN && ack_seq >= ts->recovery_point) {
+		ts->ca_state = TCP_CA_OPEN;
+	}
+	
 	// tail record
 	if (ts->state == TCP_ESTABLISHED) {
 		if (len > 0)
@@ -244,24 +256,25 @@ static void handle_out_pkt(struct tcp_state *ts, struct tcphdr *th, double time,
 			ts->tail = 0;
 	}
 	if (ts->state == TCP_ESTABLISHED && ack_seq == ts->last_out_ack) {
-		ts->dup_ack_cnt += 1;
+		ts->dup_ack_cnt = get_list_item_num(&ts->disorder_list);
 	} else {
 		ts->dup_ack_cnt = 0;	
 	}
 	if (ts->dup_ack_cnt == 3) {
 		ts->third_dup_ack_time.ack_seq = ack_seq;
 		ts->third_dup_ack_time.time = time;
+		// ts->state = TCP_
 	}
 	if(ack_seq > ts->last_out_ack) {
-		//  delete_before_seq(ack_seq, &ts->estimate_time_list);
-		 delete_node_before_seq(&ts->disorder_list, ack_seq);
+		delete_before_seq(ack_seq, &ts->estimate_time_list);
+		delete_node_before_seq(&ts->disorder_list, ack_seq);
 	}
 	//time_stamp record
-	struct time_stamp *tsp = find_rtt_entry(ts->tsp_table, ts->option.ts);
+/*	struct time_stamp *tsp = find_rtt_entry(ts->tsp_table, ts->option.ts);
 	if (tsp == NULL) {
 		insert_rtt_entry(ts->tsp_table, &ts->option.ts);
 	}
-	
+*/	
 }
 
 int tcp_state_machine(struct tcp_state *ts, struct tcphdr *th, int len, double cap_time, int dir)
@@ -281,7 +294,8 @@ int tcp_state_machine(struct tcp_state *ts, struct tcphdr *th, int len, double c
 		ts->start_time = cap_time;
 		ts->seq_base = seq;
 		ts->rcv_nxt = seq;
-		ts->rcv_una = ack_seq;
+		ts->rcv_una = seq;
+		ts->rcv_max = seq + len;
 	}
 	else if (IS_RST(th)) {
 		// both can drop the connection by RST
@@ -317,7 +331,7 @@ int tcp_state_machine(struct tcp_state *ts, struct tcphdr *th, int len, double c
 				}
 				break;
 			case TCP_FIN_WAIT1:
-				if (dir == DIR_OUT && ack_seq == ts->rcv_una)
+				if (dir == DIR_OUT && ack_seq == ts->rcv_una+1)
 					ts->state = TCP_CLOSE;
 				break;
 			case TCP_FIN_WAIT2:
@@ -354,17 +368,28 @@ int tcp_state_machine(struct tcp_state *ts, struct tcphdr *th, int len, double c
 	else {
 		duration = TIME_TO_TICK(cap_time - ts->last_time);
 	}
-	if (ts->tail == 0 && duration > thres) { // tail case is not included
+	if (ts->tail == 0 && duration > MAX(200, thres)) { // tail case is not included
 		// store the (partial) stall state in list
 		ts->stall_cnt += 1;
-
-		// fprintf(fp, "duration: %d, thres: %d \n", duration, thres);
 		struct tcp_stall_state *tss = MALLOC(struct tcp_stall_state);
+		
+		// if the stall happened during recovery stage
+		if (ts->ca_state == TCP_CA_RECOVERY ) {
+			ts->ca_state = TCP_CA_RECOVERY_LOSS;
+			ts->recovery_point = ts->rcv_max;
+		}
+		
 		init_tcp_stall(ts, tss, TICK_TO_TIME(duration));
 		tss->cur_pkt_dir = dir;
-		//tss->ack_delay_time = get_ack_delay_time(ts, tss->rcv_una);
-		//list_insert(&tss->list, ts->stall_list.prev, &ts->stall_list);
 		list_add_tail(&tss->list, &ts->stall_list);
+
+		if (ts->state == TCP_SYN_SENT || ts->state == TCP_SYN_RECV) {
+			tss->head = 1;
+		}
+		if (duration > ts->rtt.rto) {
+			ts->ca_state = TCP_CA_LOSS;
+			ts->recovery_point = ts->rcv_max;
+		}
 	}
 
 	if (dir == DIR_IN) {
@@ -459,7 +484,7 @@ static void free_tcp_state(struct tcp_state *ts)
 	delete_rtt_list(&ts->out_time_list);
 	delete_rtt_list(&ts->estimate_time_list);
 
-	cleanup_rtt_hash_table(ts->tsp_table);
+	// cleanup_rtt_hash_table(ts->tsp_table);
 	FREE(ts);
 }
 

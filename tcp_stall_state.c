@@ -8,6 +8,7 @@ void init_tcp_stall(struct tcp_state *ts, struct tcp_stall_state *tss, double du
 	tss->cur_len = ts->last_len;
 	tss->last_dir = ts->last_dir;
 	tss->tail = ts->tail;
+	tss->ca_state = ts->ca_state;
 
 	tss->cur_time = ts->last_time - ts->start_time;
 	tss->duration = duration;
@@ -17,13 +18,13 @@ void init_tcp_stall(struct tcp_state *ts, struct tcp_stall_state *tss, double du
 	tss->seq_base = ts->seq_base;
 	tss->rcv_nxt = ts->rcv_nxt;
 	tss->rcv_una = ts->rcv_una;
-	// tss->sacked = get_list_item_num(&ts->disorder_list);
-	tss->sacked = ts->dup_ack_cnt;
+	tss->sacked = get_list_item_num(&ts->disorder_list);
+	// tss->sacked = ts->dup_ack_cnt;
 	tss->spurious = 0;
 	if (tss->rcv_una == ts->third_dup_ack_time.ack_seq) {
 		tss->third_dup_ack_time = ts->third_dup_ack_time.time - ts->start_time;
 	} else {
-		tss->third_dup_ack_time = tss->cur_time; 
+		tss->third_dup_ack_time = tss->cur_time; // to  
 	}
 }
 
@@ -84,8 +85,8 @@ void dump_tss_info(FILE *fp, struct tcp_stall_state *tss)
 	fprintf(fp, "max_snd_seg_size = %d, ", tss->max_snd_seg_size);
 	fprintf(fp, "cur_time = %.3lf, ", tss->cur_time);
 	fprintf(fp, "duration = %.3lf, ", tss->duration);
-	fprintf(fp, "last_dir = %d, ", tss->last_dir);
-	fprintf(fp, "cur_pkt_dir = %d, ", tss->cur_pkt_dir);
+	// fprintf(fp, "last_dir = %d, ", tss->last_dir);
+	// fprintf(fp, "cur_pkt_dir = %d, ", tss->cur_pkt_dir);
 	// fprintf(fp, "srtt = %.3lf, ", tss->srtt);
 	// fprintf(fp, "rto = %.3lf, ", tss->rto);
 	fprintf(fp, "rcv_una = %u, ", tss->rcv_una - tss->seq_base);
@@ -95,7 +96,8 @@ void dump_tss_info(FILE *fp, struct tcp_stall_state *tss)
 	fprintf(fp, "cur_pkt_retrans = %d, ", tss->cur_pkt_retrans);
 	fprintf(fp, "retrans = %d, ", tss->retrans);
 	fprintf(fp, "sacked = %d,", tss->sacked);
-	fprintf(fp, "tail = %d, ", tss->tail);
+	fprintf(fp, "state = %d", tss->ca_state);
+	// fprintf(fp, "tail = %d, ", tss->tail);
 /*
 	fprintf(fp, "packets_out = %u, ", tss->packets_out);
 	fprintf(fp, "sacked_out = %u, ", tss->sacked_out);

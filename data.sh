@@ -8,4 +8,6 @@ grep -i 'undetermined' $1 > $2/undetermined.txt
 grep -i 'continuous_loss' $1 > $2/continuous_loss.txt
 grep -i 'ack_delay' $1 > $2/ack_delay.txt
 grep -i 'client_idle' $1 > $2/client_idle.txt
+grep -i 'recovery_loss' $1 > $2/recovery_loss.txt
+
 
